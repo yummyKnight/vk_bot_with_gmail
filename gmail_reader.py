@@ -9,9 +9,10 @@ import base64
 from googleapiclient.errors import HttpError
 import html2text
 from formatflowed import convertToWrapped
+
 # source 1 https://github.com/abhishekchhibber/Gmail-Api-through-Python/blob/master/gmail_read.py
 # source 2 https://gist.github.com/ktmud/cb5e3ca0222f86f5d0575caddbd25c03
-#TODO: -- solve problem with flowed type
+# TODO: -- solve problem with flowed type
 #      -- refractor this shit-code
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
@@ -140,19 +141,20 @@ def extract_body(msg, depth=0):
 
         if msg.get_content_type() == "text/plain":
             try:
-                base64_info = msg.get_payload(decode=True)
+
                 # clean_one = base64_info.replace("-", "+")  # decoding from Base64 to UTF-8
                 # clean_one = clean_one.replace("_", "/")  # decoding from Base64 to UTF-8
                 # print("original : ", clean_one)
                 code = msg.get_params()[1][1]
                 if code == 'flowed':
-                    clean_two = convertToWrapped(base64_info)
+                    clean_two = msg.get_payload()
                 else:
+                    base64_info = msg.get_payload(decode=True)
                     clean_two = base64_info.decode(code)
                 # if msg["Content-Transfer-Encoding"] == "base64":
                 #     clean_two = base64.urlsafe_b64decode(clean_one).decode(code)  # decoding from Base64 to UTF-8
                 # else:
-                #     print(f"\n8////////////////\n{code}\n////////////////8\n")
+                print(f"\n8////////////////\n{code}\n////////////////8\n")
                 #     clean_two = quopri.decodestring(clean_one).decode(code)
                 body.append(clean_two)
             except AssertionError as e:
