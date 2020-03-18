@@ -4,17 +4,175 @@ import email
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from bs4 import BeautifulSoup
 import base64
+import dateutil.parser as parser
 from googleapiclient.errors import HttpError
 import html2text
-from formatflowed import convertToWrapped
-
+import pprint
+from email.parser import HeaderParser
 # source 1 https://github.com/abhishekchhibber/Gmail-Api-through-Python/blob/master/gmail_read.py
 # source 2 https://gist.github.com/ktmud/cb5e3ca0222f86f5d0575caddbd25c03
-# TODO: -- solve problem with flowed type
-#      -- refractor this shit-code
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# TODO: -- refractor this shit-code
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+
+class GmailAgent:
+    def __init__(self):
+        is_token_available = os.path.exists('token.pickle')
+        # The file token.pickle stores the user's access and refresh tokens, and is
+        # created automatically when the authorization flow completes for the first
+        # time.
+        self.message = None
+        self.message_info = dict()
+        if is_token_available:
+            with open('token.pickle', 'rb') as token:
+                creds = pickle.load(token)
+        # If there are no (valid) credentials available, let the user log in.
+        self._login_and_save_token(creds)
+        self.service = build('gmail', 'v1', credentials=creds)
+
+    # def _find_massage_in_mailbox(self, user_id='me', label_id="UNSEEN"):
+    #     """List all Messages of the user's mailbox with label_ids applied.
+    #
+    #     Args:
+    #       service: Authorized Gmail API service instance.
+    #       user_id: User's email address. The special value "me"
+    #       can be used to indicate the authenticated user.
+    #       label_id: Only return Messages with this labelId applied.
+    #
+    #     Returns:
+    #       Message that have all required Labels applied. Note that the
+    #       returned list contains Message IDs, you must use get with the
+    #       appropriate id to get the details of a Message.
+    #     """
+    #     service = self.service
+    #     try:
+    #         response = service.users().messages().list(userId=user_id,
+    #                                                    labelIds=[label_id]).execute()
+    #         messages = []
+    #         if 'messages' in response:
+    #             messages.extend(response['messages'])
+    #
+    #         while 'nextPageToken' in response:
+    #             page_token = response['nextPageToken']
+    #             response = service.users().messages().list(userId=user_id,
+    #                                                        labelIds=[label_id],
+    #                                                        pageToken=page_token).execute()
+    #             messages.extend(response['messages'])
+    #         return messages
+    #     except HttpError as e:
+    #         print(e.content)
+
+    def get_info_from_message(self):
+        #         self.message = None
+        #         self.message_info = dict()
+        for message_id in ListMessagesWithLabels(self.service, 'me', ["INBOX"]):
+            self.message = GetMimeMessage(self.service, 'me', message_id["id"])
+            self._parse_header()
+            self._parse_body()
+            self._get_message_snippet()
+            pprint.pprint(self.message_info)
+
+    def _parse_body(self):
+        # Get the messages
+        # charset = msg.get_param('charset', 'utf-8').lower()
+        # update charset aliases
+        # charset = email.charset.ALIASES.get(charset, charset)
+        # msg.set_param('charset', charset)
+        body = self.message_info["Body"] = list()
+        msg = self.message
+        if msg.is_multipart():
+            main_content = None
+            # multi-part emails often have both
+            # a text/plain and a text/html part.
+            # Use the first `text/plain` part if there is one,
+            # otherwise take the first `text/*` part.
+            for part in msg.get_payload():
+                is_txt = part.get_content_type() == 'text/plain'
+                if not main_content or is_txt:
+                    main_content = extract_body(part)
+                if is_txt:
+                    break
+            if main_content:
+                body.extend(main_content)
+        elif msg.get_content_type().startswith("text/"):
+            if self.message.get_content_type() == "text/plain":
+                body.append(self._handle_plain_text())
+            elif self.message.get_content_type() == "text/html":
+                body.append(self._handle_html_text())
+            else:
+                raise TypeError("Unsupportable type")
+
+    def _handle_plain_text(self):
+        body = list()
+        msg = self.message
+        # msg.get_params() - return 2 tuples. Second element in second tuple stores letter encoding.
+        encoding = msg.get_params()[1][1]
+        if encoding == 'flowed':
+            clean_two = msg.get_payload()
+        else:
+            base64_info = msg.get_payload(decode=True)
+            clean_two = base64_info.decode(encoding)
+        body.append(clean_two)
+        return body
+        # TODO: add exception handler
+
+    def _handle_html_text(self):
+        body = list()
+        msg = self.message
+        base64_info = msg.get_payload()
+        text = html2text.html2text(base64_info)
+        body.append(text)
+        return body
+
+    def _parse_header(self):
+
+        payload = self.message.get_payload()[0] # get payload of the message
+        headers = payload['headers']  # get header of the payload
+        self._find_date_in_header(headers)
+        self._find_sender_in_header(headers)
+        self._find_subject_in_header(headers)
+        # fetching message snippet
+
+    def _find_subject_in_header(self, headers):
+        for one in headers:  # getting the Subject
+            if one['name'] == 'Subject':
+                msg_subject = one['value']
+                self.message_info['Subject'] = msg_subject
+                break
+
+    def _find_date_in_header(self, headers):
+        for two in headers:  # getting the date
+            if two['name'] == 'Date':
+                msg_date = two['value']
+                date_parse = (parser.parse(msg_date))
+                m_date = (date_parse.date())
+                self.message_info['Date'] = str(m_date)
+                break
+
+    def _find_sender_in_header(self, headers):
+        for three in headers:  # getting the Sender
+            if three['name'] == 'From':
+                msg_from = three['value']
+                self.message_info['Sender'] = msg_from
+                break
+
+    def _get_message_snippet(self):
+        self.message_info['Snippet'] = self.message['snippet']
+
+    def _login_and_save_token(self, creds):
+        # !!!important creds will be modified
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'credentials.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(creds, token)
+        return creds
 
 
 def GetMimeMessage(service, user_id, msg_id):
@@ -40,25 +198,6 @@ def GetMimeMessage(service, user_id, msg_id):
         return mime_msg
     except HttpError as error:
         print(f'An error occurred: {error}')
-
-
-def GetContentfromMessage(payld):
-    mssg_parts = payld['parts']  # fetching the message parts
-    part_one = mssg_parts[0]  # fetching first element of the part
-    try:
-        part_body = part_one['body']  # fetching body of the message
-        part_data = part_body['data']  # fetching data from the body
-        clean_one = part_data.replace("-", "+")  # decoding from Base64 to UTF-8
-        clean_one = clean_one.replace("_", "/")  # decoding from Base64 to UTF-8
-        clean_two = base64.b64decode(bytes(clean_one, 'UTF-8'))  # decoding from Base64 to UTF-8
-        soup = BeautifulSoup(clean_two, "lxml")
-        mssg_body = soup.body()
-        return mssg_body
-    except KeyError:
-        return None
-    # mssg_body is a readible form of message body
-    # depending on the end user's requirements, it can be further cleaned
-    # using regex, beautiful soup, or any other method
 
 
 def GetMessage(service, user_id, msg_id):
@@ -109,7 +248,7 @@ def ListMessagesWithLabels(service, user_id, label_ids=[]):
             response = service.users().messages().list(userId=user_id,
                                                        labelIds=label_ids,
                                                        pageToken=page_token).execute()
-            messages.extend(response['messages'])
+            # messages.extend(response['messages'])
         return messages
     except HttpError as e:
         print(e.content)
@@ -215,9 +354,11 @@ def main():
     for message_id in ListMessagesWithLabels(service, 'me', ["INBOX"]):
         answer = GetMimeMessage(service, 'me', message_id["id"])
         print("------------/-/-/------------------------//-------------------/-/-/")
-        print(extract_body(answer)[0])
+        t = extract_body(answer)
+        print(t)
+        print(t[0])
         print("------------/-/-/------------------------//-------------------/-/-/")
 
 
 if __name__ == '__main__':
-    main()
+    GmailAgent().get_info_from_message()

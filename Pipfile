@@ -8,10 +8,9 @@ verify_ssl = true
 [packages]
 google-api-python-client = "*"
 google-auth-oauthlib = "*"
-bs4 = "*"
 lxml = "*"
 html2text = "*"
-formatflowed = "*"
+python-dateutil = "*"
 
 [requires]
 python_version = "3.7"
