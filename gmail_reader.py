@@ -9,7 +9,10 @@ import dateutil.parser as parser
 from googleapiclient.errors import HttpError
 import html2text
 import pprint
-from email.parser import HeaderParser
+from email.header import decode_header
+from outside import getmailheader
+from numpy.core import unicode
+
 # source 1 https://github.com/abhishekchhibber/Gmail-Api-through-Python/blob/master/gmail_read.py
 # source 2 https://gist.github.com/ktmud/cb5e3ca0222f86f5d0575caddbd25c03
 # TODO: -- refractor this shit-code
@@ -126,36 +129,33 @@ class GmailAgent:
         return body
 
     def _parse_header(self):
+        self.message_info["Subject"] = self._parse_parameter_from_header(self.message.get('Subject',' '))
+        self.message_info["From"] = self._parse_parameter_from_header(self.message.get('From'))
+        self.message_info["To"] = self._parse_parameter_from_header(self.message.get('To'))
+        self.message_info["Date"] = self._parse_date_from_header()
 
-        payload = self.message.get_payload()[0] # get payload of the message
-        headers = payload['headers']  # get header of the payload
-        self._find_date_in_header(headers)
-        self._find_sender_in_header(headers)
-        self._find_subject_in_header(headers)
-        # fetching message snippet
+    def _parse_parameter_from_header(self, parameter):
+        default_encoding = "utf-8"
+        try:
+            headers = decode_header(parameter)
+        except email.errors.HeaderParseError:
+            # This already appended in email.base64mime.decode()
+            # instead return a sanitized ascii string
+            return parameter.encode('ascii', 'replace').decode('ascii')
+        else:
+            for k, (text, charset) in enumerate(headers):
+                try:
+                    headers[k] = unicode(text, charset or default_encoding, errors='replace')
+                except LookupError:
+                    # if the charset is unknown, force default
+                    headers[k] = unicode(text, default_encoding, errors='replace')
+                except TypeError:
+                    headers[k] = text
+            return u"".join(headers)
 
-    def _find_subject_in_header(self, headers):
-        for one in headers:  # getting the Subject
-            if one['name'] == 'Subject':
-                msg_subject = one['value']
-                self.message_info['Subject'] = msg_subject
-                break
-
-    def _find_date_in_header(self, headers):
-        for two in headers:  # getting the date
-            if two['name'] == 'Date':
-                msg_date = two['value']
-                date_parse = (parser.parse(msg_date))
-                m_date = (date_parse.date())
-                self.message_info['Date'] = str(m_date)
-                break
-
-    def _find_sender_in_header(self, headers):
-        for three in headers:  # getting the Sender
-            if three['name'] == 'From':
-                msg_from = three['value']
-                self.message_info['Sender'] = msg_from
-                break
+    def _parse_date_from_header(self):
+        date = parser.parse(self.message.get('Received').split(";")[1].strip()).date().strftime("%d/%m/%Y")
+        return date
 
     def _get_message_snippet(self):
         self.message_info['Snippet'] = self.message['snippet']

@@ -11,6 +11,7 @@ google-auth-oauthlib = "*"
 lxml = "*"
 html2text = "*"
 python-dateutil = "*"
+numpy = "*"
 
 [requires]
 python_version = "3.7"
