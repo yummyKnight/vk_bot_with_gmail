@@ -12,6 +12,7 @@ lxml = "*"
 html2text = "*"
 python-dateutil = "*"
 numpy = "*"
+vk-api = "*"
 
 [requires]
 python_version = "3.7"

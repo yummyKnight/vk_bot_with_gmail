@@ -14,7 +14,6 @@ from numpy.core import unicode
 
 # source 1 https://github.com/abhishekchhibber/Gmail-Api-through-Python/blob/master/gmail_read.py
 # source 2 https://gist.github.com/ktmud/cb5e3ca0222f86f5d0575caddbd25c03
-# TODO: -- refractor this shit-code
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 
@@ -169,8 +168,9 @@ class GmailAgent:
             return u"".join(headers)
 
     def _parse_date_from_header(self):
-        date = parser.parse(self._message.get('Received').split(";")[1].strip()).date().strftime("%d/%m/%Y")
-        return date
+        if "Received" in self._message:
+            date = parser.parse(self._message.get('Received').split(";")[1].strip()).date().strftime("%d/%m/%Y")
+            return date
 
     def _get_message_snippet(self):
         self._message_info['Snippet'] = self._message['snippet']
