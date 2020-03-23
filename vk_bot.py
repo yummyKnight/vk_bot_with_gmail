@@ -7,6 +7,7 @@ from pprint import pprint
 from gmail_reader import GmailAgent
 import threading
 import CREDS
+import logging
 
 
 class Server:
@@ -14,17 +15,21 @@ class Server:
     def __init__(self, api_token, group_id, server_name: str = "Empty"):
         # Даем серверу имя
         self.server_name = server_name
-
-        # Для Long Poll
+        # Vk stuff
         self.vk = vk_api.VkApi(token=api_token)
-
-        # Для использования Long Poll API
         self.long_poll = VkBotLongPoll(self.vk, group_id)
-        self.gmail = GmailAgent()
-        # Для вызова методов vk_api
         self.vk_api = self.vk.get_api()
 
+        self.gmail = GmailAgent()
+
         self.lock = threading.Lock()
+        # logger config
+        self.logger = logging.getLogger("vk_bot")
+        handler = logging.FileHandler('sample.log', 'a+', 'utf-8')
+        formatter = logging.Formatter("%(asctime)s %(name)s:%(levelname)s:%(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.INFO)
 
     @staticmethod
     def _random_id():
@@ -56,11 +61,10 @@ class Server:
     def massage_replying(self):
         while True:
             for event in self.long_poll.listen():
-                pprint(event)
                 try:
                     if event.type == VkBotEventType.MESSAGE_NEW:
-                        pprint(event)
                         text: str = event.message["text"]
+                        self.logger.info("Бот ответил на новое письмо из беседы" + str(event))
                         peer_id = event.object["message"]["peer_id"]
                         if text.replace(" ", "") == "[club192941765|Grumpybot]!all":
                             pprint(self.get_members(peer_id))
@@ -76,6 +80,7 @@ class Server:
                     continue
 
     def start(self):
+        self.logger.info("Бот начал свою работу!")
         try:
             thread1 = threading.Thread(target=Server.massage_replying, args=(self,))
             thread2 = threading.Thread(target=Server.start_monitoring_gmail, args=(self,))
@@ -85,6 +90,8 @@ class Server:
         except Exception as e:
             self.send_message("Случилась страшная и непредвиденная ошибка:\n" + str(
                 e) + "Бот завершает свою работу до выяснения причин.", random_id=self._random_id())
+            self.logger.critical(e.__str__())
+            self.logger.info("Бот окончил свою работу!")
             return -1
 
     def start_monitoring_gmail(self):
@@ -99,18 +106,19 @@ class Server:
                     string_list.append("Тема: " + email_dict["Subject"])
                     if email_dict["Snippet"]:
                         string_list.append("Snippet: " + email_dict["Snippet"])
+                    # need refactoring
+                    info_msg = str()
                     for part in email_dict["Body"]:
                         for subpart in part:
                             string_list.append(subpart)
+                            info_msg = subpart[20:]
                     string_list.append("Дата: " + email_dict["Date"])
                     string_list.append("Количество прикрепленных файлов: " + str(email_dict["Attach_Num"]))
                     self.send_message("\n".join(string_list), self._random_id())
+                    self.logger.info("Бот выслал в беседу новое письмо! Вот его начало:" + info_msg)
 
 
 if __name__ == '__main__':
     server1 = Server(CREDS.Creds.api_token, CREDS.Creds.group_id,
                      "server1")
-    # vk_api_token - API токен, который мы ранее создали
-    # 172998024 - id сообщества-бота
-    # "server1" - имя сервера
     server1.start()
