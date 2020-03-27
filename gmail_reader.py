@@ -4,10 +4,10 @@ import email
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-import base64
+from base64 import urlsafe_b64decode
 import dateutil.parser as parser
 from googleapiclient.errors import HttpError
-import html2text
+from html2text import html2text
 import pprint
 from email.header import decode_header
 from numpy.core import unicode
@@ -56,7 +56,8 @@ class GmailAgent:
         return result
 
     def scan_for_new_message(self):
-        if len(self._list_messages_with_labels(["UNREAD"])) != 0:
+        messages = self._list_messages_with_labels(["UNREAD"])
+        if messages and len(messages) != 0:
             return True
         else:
             return False
@@ -129,7 +130,7 @@ class GmailAgent:
                                                            format='raw').execute()
 
             # print('Message snippet: %s' % message['snippet'])
-            msg_str = base64.urlsafe_b64decode(message['raw'].encode('utf-8'))
+            msg_str = urlsafe_b64decode(message['raw'].encode('utf-8'))
             mime_msg = email.message_from_string(msg_str.decode("utf-8", errors='replace'))
 
             return mime_msg
@@ -139,13 +140,12 @@ class GmailAgent:
     def _handle_html_text(self, msg):
         body = self._message_info["Body"]
         base64_info = msg.get_payload()
-        text = html2text.html2text(base64_info)
+        text = html2text(base64_info)
         body.append([text])
 
     def _parse_header(self):
         self._message_info["Subject"] = self._parse_parameter_from_header(self._message.get('Subject', ' '))
         self._message_info["From"] = self._parse_parameter_from_header(self._message.get('From'))
-        self._message_info["To"] = self._parse_parameter_from_header(self._message.get('To'))
         self._message_info["Date"] = self._parse_date_from_header()
 
     def _parse_parameter_from_header(self, parameter):
