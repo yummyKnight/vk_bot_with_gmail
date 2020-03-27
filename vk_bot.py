@@ -88,6 +88,10 @@ class Server:
                                     self._random_id(), peer_id)
                     except requests.exceptions.ReadTimeout:
                         continue
+                    except requests.exceptions.ConnectionError as e:
+                        self.logger.info("Потеря соединения с сервером vk " + str(e))
+                        time.sleep(30)
+
         except Exception as e:
             self.send_message("Случилась страшная и непредвиденная ошибка:\n" + str(
                 e) + "Бот завершает свою работу до выяснения причин.", random_id=self._random_id())
