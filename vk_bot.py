@@ -75,9 +75,9 @@ class Server:
                             if text.replace(" ", "").split("!")[-1] == "all":
                                 pprint(self.get_members(peer_id))
                             elif text.replace(" ", "").split("!")[-1] == "hi":
-                                self.send_message("Buenos dias, pedrilas", self._random_id(), peer_id)
+                                self.send_message("Buenos dias", self._random_id(), peer_id)
                             elif text.replace(" ", "").split("!")[-1] == "bye":
-                                self.send_message("Adios, pedrilas", self._random_id(), peer_id)
+                                self.send_message("Adios", self._random_id(), peer_id)
                             elif text.replace(" ", "").split("!")[-1] == "debug":
                                 self.send_message(
                                     "Вот сырец последнего сообщения:\n" + self.gmail.get_last_message_raw(),
